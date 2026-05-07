@@ -127,7 +127,8 @@ fi
 echo "[4/6] 创建配置文件..."
 cat > "$PORTABLE_DIR/qt.conf" << 'QTCONF'
 [Paths]
-Plugins = ./lib/plugins
+Prefix = .
+Plugins = lib/plugins
 QTCONF
 
 # 6. 创建启动脚本
