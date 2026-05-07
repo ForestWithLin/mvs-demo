@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Git Workflow
+
+- **Never commit `.claude/` folder or its contents** to git. This directory contains session-specific Claude configuration and memory files — it must remain local-only.
+- **Commit before every modification**: Before making any code changes (edits, new files, refactors, etc.), first create a git commit of the current state. This ensures every change is traceable and reversible.
+
 ## Build Commands
 
 ```bash
