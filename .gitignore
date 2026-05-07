@@ -1,0 +1,57 @@
+# --- Build ---
+build/
+build-*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+CMakeUserPresets.json
+*.cmake
+!CMakeLists.txt
+!cmake/
+
+# --- Qt generated ---
+*_autogen/
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+*.pro.user
+*.pro.user.*
+Makefile
+Makefile.*
+
+# --- Object files ---
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+*.la
+*.lo
+
+# --- Compiled ---
+*.exe
+*.out
+*.app
+
+# --- Portable bundle output ---
+MVSViewer-Portable/
+MVSViewer-Portable.tar.gz
+
+# --- IDE / Editor ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- Test ---
+test_grab/test_grab
+test_grab/*.o
+
+# --- Misc ---
+*.log
+*.tmp
