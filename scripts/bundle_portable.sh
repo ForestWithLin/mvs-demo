@@ -42,7 +42,7 @@ mkdir -p "$PORTABLE_DIR/lib/plugins/platforms"
 cp "$EXECUTABLE" "$PORTABLE_DIR/MVSViewer"
 
 # 2. 分析执行文件依赖，收集 Qt 库
-echo "[1/5] 收集 Qt 库..."
+echo "[1/6] 收集 Qt 库..."
 for bin in "$PORTABLE_DIR/MVSViewer" "$QT_PLUGIN_DIR/platforms/libqxcb.so"; do
     [ -f "$bin" ] && ldd "$bin" 2>/dev/null | grep "$QT_LIB_DIR" | awk '{print $3}' | while read -r lib; do
         # 复制所有版本变体
@@ -52,12 +52,51 @@ for bin in "$PORTABLE_DIR/MVSViewer" "$QT_PLUGIN_DIR/platforms/libqxcb.so"; do
     done
 done
 
-# 3. 复制 Qt 平台插件 (xcb)
-echo "[2/5] 复制 Qt 平台插件..."
+# 3. 复制 Qt 插件
+echo "[2/6] 复制 Qt 插件..."
+
+# 3a. 平台插件
+mkdir -p "$PORTABLE_DIR/lib/plugins/platforms"
 cp "$QT_PLUGIN_DIR/platforms/libqxcb.so" "$PORTABLE_DIR/lib/plugins/platforms/"
 
+# 3b. 图像格式插件 (必须: 加载图标/图片文件)
+if [ -d "$QT_PLUGIN_DIR/imageformats" ]; then
+    mkdir -p "$PORTABLE_DIR/lib/plugins/imageformats"
+    cp "$QT_PLUGIN_DIR/imageformats/"*.so "$PORTABLE_DIR/lib/plugins/imageformats/"
+fi
+
+# 3c. XCB OpenGL 集成插件 (必须: Qt6 OpenGL 渲染)
+if [ -d "$QT_PLUGIN_DIR/xcbglintegrations" ]; then
+    mkdir -p "$PORTABLE_DIR/lib/plugins/xcbglintegrations"
+    cp "$QT_PLUGIN_DIR/xcbglintegrations/"*.so "$PORTABLE_DIR/lib/plugins/xcbglintegrations/"
+fi
+
+# 3d. 图标引擎插件 (SVG 图标)
+if [ -d "$QT_PLUGIN_DIR/iconengines" ]; then
+    mkdir -p "$PORTABLE_DIR/lib/plugins/iconengines"
+    cp "$QT_PLUGIN_DIR/iconengines/"*.so "$PORTABLE_DIR/lib/plugins/iconengines/"
+fi
+
+# 3e. EGL 设备集成 (GPU 加速渲染)
+if [ -d "$QT_PLUGIN_DIR/egldeviceintegrations" ]; then
+    mkdir -p "$PORTABLE_DIR/lib/plugins/egldeviceintegrations"
+    cp "$QT_PLUGIN_DIR/egldeviceintegrations/"*.so "$PORTABLE_DIR/lib/plugins/egldeviceintegrations/"
+fi
+
+# 3f. 平台主题 (GTK 集成、桌面门户)
+if [ -d "$QT_PLUGIN_DIR/platformthemes" ]; then
+    mkdir -p "$PORTABLE_DIR/lib/plugins/platformthemes"
+    cp "$QT_PLUGIN_DIR/platformthemes/"*.so "$PORTABLE_DIR/lib/plugins/platformthemes/"
+fi
+
+# 3g. 通用插件 (触摸/输入设备支持)
+if [ -d "$QT_PLUGIN_DIR/generic" ]; then
+    mkdir -p "$PORTABLE_DIR/lib/plugins/generic"
+    cp "$QT_PLUGIN_DIR/generic/"*.so "$PORTABLE_DIR/lib/plugins/generic/"
+fi
+
 # 4. 复制 MVS SDK 库
-echo "[3/5] 复制 MVS SDK 库..."
+echo "[3/6] 复制 MVS SDK 库..."
 for f in "$MVS_LIB_DIR"/*.so*; do
     if [ -f "$f" ] || [ -L "$f" ]; then
         cp -P "$f" "$PORTABLE_DIR/lib/"
@@ -65,7 +104,7 @@ for f in "$MVS_LIB_DIR"/*.so*; do
 done
 
 # 5. 创建 qt.conf - 告诉 Qt 插件位置
-echo "[4/5] 创建配置文件..."
+echo "[4/6] 创建配置文件..."
 cat > "$PORTABLE_DIR/qt.conf" << 'QTCONF'
 [Paths]
 Plugins = ./lib/plugins
@@ -77,12 +116,14 @@ cat > "$PORTABLE_DIR/run.sh" << 'RUNSCRIPT'
 DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$DIR"
 export LD_LIBRARY_PATH="$DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+# 调试时取消注释可查看 Qt 插件加载日志:
+# export QT_DEBUG_PLUGINS=1
 ./MVSViewer "$@"
 RUNSCRIPT
 chmod +x "$PORTABLE_DIR/run.sh"
 
 # 7. 创建压缩包
-echo "[5/5] 打包压缩..."
+echo "[5/6] 打包压缩..."
 cd "$BUILD_DIR"
 rm -f "MVSViewer-Portable.tar.gz"
 tar czf "MVSViewer-Portable.tar.gz" "MVSViewer-Portable/"
