@@ -95,13 +95,33 @@ if [ -d "$QT_PLUGIN_DIR/generic" ]; then
     cp "$QT_PLUGIN_DIR/generic/"*.so "$PORTABLE_DIR/lib/plugins/generic/"
 fi
 
-# 4. 复制 MVS SDK 库
+# 4. 复制 MVS SDK 库及配套文件
 echo "[3/6] 复制 MVS SDK 库..."
+# 4a. 复制所有 .so 库
 for f in "$MVS_LIB_DIR"/*.so*; do
     if [ -f "$f" ] || [ -L "$f" ]; then
         cp -P "$f" "$PORTABLE_DIR/lib/"
     fi
 done
+
+# 4b. 复制 GenICam .cti 传输层文件 (必需: GenICam 运行时 dlopen 加载)
+for f in "$MVS_LIB_DIR"/*.cti; do
+    [ -f "$f" ] && cp -P "$f" "$PORTABLE_DIR/lib/"
+done
+
+# 4c. 复制 SDK 配置文件 (Bayer 插值算法等参数)
+for f in "$MVS_LIB_DIR"/*.ini; do
+    [ -f "$f" ] && cp -P "$f" "$PORTABLE_DIR/lib/"
+done
+
+# 4d. 复制 ThirdParty 依赖库 (FFmpeg 相关, libFormatConversion 内部 dlopen 使用)
+if [ -d "$MVS_LIB_DIR/ThirdParty" ]; then
+    for f in "$MVS_LIB_DIR/ThirdParty"/*.so*; do
+        if [ -f "$f" ] || [ -L "$f" ]; then
+            cp -P "$f" "$PORTABLE_DIR/lib/"
+        fi
+    done
+fi
 
 # 5. 创建 qt.conf - 告诉 Qt 插件位置
 echo "[4/6] 创建配置文件..."
