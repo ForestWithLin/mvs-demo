@@ -74,3 +74,43 @@
 | 0x00 | BITMAPFILEHEADER (14 bytes) |
 | 0x0E | BITMAPINFOHEADER (40 bytes) = 宽/高/位深(24)/不压缩 |
 | 0x36 | 像素数据 = 每像素 3 bytes (B-G-R 顺序)，bottom-up 行序，每行 4 字节对齐 |
+
+## PixelFormat 寄存器问题
+
+### 现象
+
+某些虚拟设备连接后 ImageViewer 输出异常：
+- 部分设备显示纯黑
+- 部分显示默认/旧图片（非用户刚转换的图片）
+
+### 根因
+
+虚拟相机的 BMP 模拟**只支持 `Mono8/` 和 `RGB24/` 两种格式目录**，但不同设备型号的 XML 定义了大量像素格式（Mono8/10/12/16、RGB8Packed、BGR8Packed、YUV 等）。当 PixelFormat 寄存器值被设为非标准值或不支持的格式时，SDK 无法匹配到 BMP 目录。
+
+### 各设备 PixelFormat 对比
+
+| 设备目录 | 相机型号 | 类型 | PixelFormat 寄存器值 | 含义 | 有对应 BMP 目录 |
+|---------|---------|------|--------------------|------|---------------|
+| Vir2743340 | ? | ? | 0x01080001 | 标准 Mono8 | Mono8 ✅ |
+| Vir46568733 | MV-CL020-40GM | GigE Mono | 0x01080001 | 标准 Mono8 | Mono8 ✅ |
+| Vir65253128 | MV-CS004-10UM | USB Mono | 0x01080001 | 标准 Mono8 | Mono8 ✅ |
+| Vir11340209 | MV-CH120-10UC | USB Color | 0x02180014 | 标准 RGB8Packed | RGB24 ✅ |
+| **Vir46574695** | MV-CU004-10GC | GigE Color | **0x01080009** | **非标准值** | **❌ 无法匹配** |
+
+### 寄存器信息
+
+- PixelFormat 寄存器地址：`0x30610`
+- 位于 `*_regfile.dat` 中
+- 标准值对照：
+
+| 格式 | 标准值 | 十进制 |
+|------|-------|--------|
+| Mono8 | 0x01080001 | 16777217 |
+| RGB8Packed | 0x02180014 | 35225620 |
+
+### 修复方法
+
+转换图片后，同步修正 `_regfile.dat` 中 `0x30610` 的 PixelFormat 值：
+
+- 保存到 `Mono8/` → 写 `0x01080001` (16777217)
+- 保存到 `RGB24/` → 写 `0x02180014` (35225620)

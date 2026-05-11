@@ -294,6 +294,7 @@ void MainWindow::onDisconnectDevice()
 void MainWindow::onRefreshDevices()
 {
     QMetaObject::invokeMethod(m_cameraEngine, "enumDevices", Qt::QueuedConnection);
+    m_virtualCamPanel->refreshDevices();
 }
 
 void MainWindow::onSnapshot()
