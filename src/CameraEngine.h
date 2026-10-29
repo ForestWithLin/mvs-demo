@@ -8,9 +8,12 @@
 #include <QMutex>
 #include <atomic>
 #include <vector>
+#include <memory>
 #include "Types.h"
 
 #include "MvCameraControl.h"
+
+class FvcamBackend;
 
 class CameraEngine : public QObject
 {
@@ -24,6 +27,8 @@ public:
     QThread* workerThread() const { return m_workerThread; }
 
 public slots:
+    // 仅允许未连接时切换，完成后重新枚举；所有 SDK 操作都在工作线程执行。
+    void setSdk(CameraSdk sdk);
     void enumDevices();
     void connectToDevice(int index);
     void disconnectDevice();
@@ -34,6 +39,7 @@ public slots:
     void setTargetFrameRate(double fps);
 
 signals:
+    void sdkChanged(CameraSdk sdk);
     void deviceListUpdated(const QList<DeviceInfo>& devices);
     void frameReceived(const QImage& frame);
     void deviceConnected();
@@ -47,6 +53,10 @@ private slots:
     void grabFrame();
 
 private:
+    bool isConnected() const;
+    CameraSdk m_sdk = CameraSdk::MVS;
+    std::unique_ptr<FvcamBackend> m_fvcam;
+    bool m_mvsInitialized = false;
     void* m_handle = nullptr;
     QThread* m_workerThread = nullptr;
     QTimer* m_grabTimer = nullptr;

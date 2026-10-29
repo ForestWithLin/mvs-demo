@@ -3,6 +3,10 @@
 
 #include <QString>
 #include <QMetaType>
+#include <QList>
+
+enum class CameraSdk { MVS, FVCAM };
+Q_DECLARE_METATYPE(CameraSdk)
 
 struct DeviceInfo {
     QString name;            // 设备显示名称

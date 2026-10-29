@@ -1,0 +1,11 @@
+
+<root>
+  <Demosaic>0</Demosaic>
+  <FocusMaxStep>5</FocusMaxStep>
+  <FocusStepWaitTime>6</FocusStepWaitTime>
+  <EnableRoi>false</EnableRoi>
+  <AutoFocusThreshold>0</AutoFocusThreshold>
+  <EnableFixedTimeXYC>true</EnableFixedTimeXYC>
+  <XYCFcousWaitTime>200</XYCFcousWaitTime>
+  <EnableEndStepXYC>true</EnableEndStepXYC>
+</root>

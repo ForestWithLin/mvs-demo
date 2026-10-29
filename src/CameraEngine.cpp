@@ -1,4 +1,5 @@
 #include "CameraEngine.h"
+#include "FvcamBackend.h"
 #include "CameraParams.h"
 
 #include <QDateTime>
@@ -11,12 +12,34 @@ CameraEngine::CameraEngine(QObject* parent)
 {
     qRegisterMetaType<DeviceInfo>("DeviceInfo");
     qRegisterMetaType<QList<DeviceInfo>>("QList<DeviceInfo>");
+    qRegisterMetaType<CameraSdk>();
 }
 
 CameraEngine::~CameraEngine()
 {
-    stopGrabbing();
     disconnectDevice();
+    if (m_mvsInitialized) MV_CC_Finalize();
+}
+
+bool CameraEngine::isConnected() const
+{
+    return m_sdk == CameraSdk::MVS ? m_handle != nullptr : m_fvcam && m_fvcam->isOpen();
+}
+
+void CameraEngine::setSdk(CameraSdk sdk)
+{
+    if (sdk == m_sdk) return;
+    if (isConnected()) {
+        emit sdkChanged(m_sdk);
+        emit errorOccurred(-1, "请先断开相机，再切换 SDK");
+        emit deviceListUpdated(m_deviceList);
+        return;
+    }
+    m_sdk = sdk;
+    emit sdkChanged(m_sdk);
+    if (sdk == CameraSdk::FVCAM && !m_fvcam)
+        m_fvcam = std::make_unique<FvcamBackend>();
+    enumDevices();
 }
 
 void CameraEngine::setWorkerThread(QThread* thread)
@@ -26,7 +49,31 @@ void CameraEngine::setWorkerThread(QThread* thread)
 
 void CameraEngine::enumDevices()
 {
-    MV_CC_Initialize();
+    if (isConnected()) {
+        emit errorOccurred(-1, "请先断开相机，再刷新设备");
+        return;
+    }
+    m_deviceList.clear();
+    if (m_sdk == CameraSdk::FVCAM) {
+        int ret = m_fvcam->enumerate(m_deviceList);
+        if (ret != 0) {
+            emit deviceListUpdated(m_deviceList);
+            emit errorOccurred(ret, QString("FVCAM 枚举失败: %1").arg(ret));
+            return;
+        }
+        emit deviceListUpdated(m_deviceList);
+        emit statusMessage(QString("FVCAM 枚举完成，发现 %1 个设备").arg(m_deviceList.size()));
+        return;
+    }
+    if (!m_mvsInitialized) {
+        int ret = MV_CC_Initialize();
+        if (ret != MV_OK) {
+            emit deviceListUpdated(m_deviceList);
+            emit errorOccurred(ret, "MVS 初始化失败");
+            return;
+        }
+        m_mvsInitialized = true;
+    }
 
     MV_CC_DEVICE_INFO_LIST devList;
     memset(&devList, 0, sizeof(devList));
@@ -34,6 +81,7 @@ void CameraEngine::enumDevices()
     // 枚举所有类型设备 (GigE | USB | CameraLink)
     int ret = MV_CC_EnumDevices(MV_GIGE_DEVICE | MV_USB_DEVICE | MV_CAMERALINK_DEVICE, &devList);
     if (ret != MV_OK) {
+        emit deviceListUpdated(m_deviceList);
         emit errorOccurred(ret, QString("枚举设备失败: err=%1").arg(ret));
         return;
     }
@@ -79,11 +127,22 @@ void CameraEngine::connectToDevice(int index)
     }
 
     // 先断开之前的连接
-    if (m_handle) {
+    if (isConnected()) {
         disconnectDevice();
     }
 
     DeviceInfo& info = m_deviceList[index];
+    if (m_sdk == CameraSdk::FVCAM) {
+        int ret = m_fvcam->open(index);
+        if (ret != 0) {
+            emit errorOccurred(ret, QString("FVCAM 打开设备失败: %1").arg(ret));
+            return;
+        }
+        info.isConnected = true;
+        emit deviceConnected();
+        emit statusMessage(QString("FVCAM 已连接到: %1").arg(info.name));
+        return;
+    }
     MV_CC_DEVICE_INFO* pInfo = static_cast<MV_CC_DEVICE_INFO*>(info.sdkDeviceInfo);
 
     int ret = MV_CC_CreateHandle(&m_handle, pInfo);
@@ -111,6 +170,7 @@ void CameraEngine::connectToDevice(int index)
 void CameraEngine::disconnectDevice()
 {
     stopGrabbing();
+    if (m_fvcam) m_fvcam->close();
 
     if (m_handle) {
         MV_CC_CloseDevice(m_handle);
@@ -129,11 +189,12 @@ void CameraEngine::disconnectDevice()
 
 void CameraEngine::startGrabbing()
 {
-    if (!m_handle || m_isGrabbing) return;
+    if (!isConnected() || m_isGrabbing) return;
 
-    int ret = MV_CC_StartGrabbing(m_handle);
+    int ret = m_sdk == CameraSdk::FVCAM ? m_fvcam->start() : MV_CC_StartGrabbing(m_handle);
     if (ret != MV_OK) {
-        emit errorOccurred(ret, "开始取流失败");
+        emit errorOccurred(ret, QString("%1 开始取流失败: %2")
+            .arg(m_sdk == CameraSdk::FVCAM ? "FVCAM（请检查像素格式是否支持）" : "MVS").arg(ret));
         return;
     }
 
@@ -150,7 +211,7 @@ void CameraEngine::startGrabbing()
 
 void CameraEngine::stopGrabbing()
 {
-    m_isGrabbing = false;
+    const bool wasGrabbing = m_isGrabbing.exchange(false);
 
     if (m_grabTimer) {
         m_grabTimer->stop();
@@ -158,7 +219,10 @@ void CameraEngine::stopGrabbing()
         m_grabTimer = nullptr;
     }
 
-    if (m_handle) {
+    if (m_sdk == CameraSdk::FVCAM && m_fvcam) {
+        int ret = m_fvcam->stop();
+        if (ret != 0) emit errorOccurred(ret, "FVCAM 停止取流失败");
+    } else if (m_handle && wasGrabbing) {
         MV_CC_StopGrabbing(m_handle);
     }
 
@@ -176,7 +240,13 @@ void CameraEngine::setTargetFrameRate(double fps)
     }
 
     // 同时尝试设置相机端帧率（部分相机支持）
-    if (m_handle) {
+    if (m_sdk == CameraSdk::FVCAM && isConnected()) {
+        int ret = m_fvcam->write("AcquisitionFrameRate", fps);
+        if (ret != 0) {
+            emit errorOccurred(ret, QString("软件限帧已生效，FVCAM 相机帧率设置失败: %1").arg(ret));
+            return;
+        }
+    } else if (m_handle) {
         MV_CC_SetFloatValue(m_handle, "AcquisitionFrameRate", static_cast<float>(fps));
     }
 
@@ -185,7 +255,14 @@ void CameraEngine::setTargetFrameRate(double fps)
 
 void CameraEngine::grabFrame()
 {
-    if (!m_handle || !m_isGrabbing) return;
+    if (!isConnected() || !m_isGrabbing) return;
+    if (m_sdk == CameraSdk::FVCAM) {
+        QImage image;
+        int ret = m_fvcam->grab(image);
+        if (ret != 0) emit errorOccurred(ret, QString("FVCAM 取帧失败: %1").arg(ret));
+        else if (!image.isNull()) emit frameReceived(image);
+        return;
+    }
 
     // MV_CC_GetImageBuffer 由 SDK 内部管理缓冲区，无溢出风险
     MV_FRAME_OUT frameOut = {0};
@@ -236,7 +313,14 @@ void CameraEngine::grabFrame()
 
 void CameraEngine::getParam(const QString& key)
 {
-    if (!m_handle) return;
+    if (!isConnected()) return;
+    if (m_sdk == CameraSdk::FVCAM) {
+        QVariant value;
+        int ret = m_fvcam->read(key, value);
+        if (ret == 0) emit paramReadFinished(key, value);
+        else emit errorOccurred(ret, QString("FVCAM 参数不可读或不支持: %1 (err=%2)").arg(key).arg(ret));
+        return;
+    }
 
     QByteArray keyBytes = key.toUtf8();
 
@@ -272,7 +356,13 @@ void CameraEngine::getParam(const QString& key)
 
 void CameraEngine::setParam(const QString& key, const QVariant& value)
 {
-    if (!m_handle) return;
+    if (!isConnected()) return;
+    if (m_sdk == CameraSdk::FVCAM) {
+        int ret = m_fvcam->write(key, value);
+        emit paramWriteFinished(key, ret == 0);
+        if (ret != 0) emit errorOccurred(ret, QString("FVCAM 设置参数失败: %1 (err=%2)").arg(key).arg(ret));
+        return;
+    }
 
     QByteArray keyBytes = key.toUtf8();
     int ret = MV_OK;

@@ -3,6 +3,7 @@
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLabel>
+#include <QSignalBlocker>
 
 DevicePanel::DevicePanel(QWidget* parent)
     : QWidget(parent)
@@ -14,6 +15,14 @@ DevicePanel::DevicePanel(QWidget* parent)
     auto* titleLabel = new QLabel("设备列表");
     titleLabel->setStyleSheet("font-weight: bold; font-size: 13px; padding: 4px;");
     mainLayout->addWidget(titleLabel);
+
+    auto* sdkLayout = new QHBoxLayout();
+    sdkLayout->addWidget(new QLabel("相机 SDK:"));
+    m_sdkCombo = new QComboBox(this);
+    m_sdkCombo->addItem("MVS", QVariant::fromValue(CameraSdk::MVS));
+    m_sdkCombo->addItem("FVCAM", QVariant::fromValue(CameraSdk::FVCAM));
+    sdkLayout->addWidget(m_sdkCombo);
+    mainLayout->addLayout(sdkLayout);
 
     // 树形列表
     m_tree = new QTreeWidget(this);
@@ -40,6 +49,13 @@ DevicePanel::DevicePanel(QWidget* parent)
     mainLayout->addLayout(btnLayout);
 
     // 连接信号
+    connect(m_sdkCombo, &QComboBox::currentIndexChanged, this, [this]() {
+        updateDeviceList({});
+        // 等待工作线程返回新列表，期间不能提交旧列表中的设备索引。
+        m_sdkCombo->setEnabled(false);
+        m_refreshBtn->setEnabled(false);
+        emit sdkChangeRequested(m_sdkCombo->currentData().value<CameraSdk>());
+    });
     connect(m_refreshBtn, &QPushButton::clicked, this, &DevicePanel::refreshRequested);
     connect(m_connectBtn, &QPushButton::clicked, this, &DevicePanel::onConnectClicked);
     connect(m_disconnectBtn, &QPushButton::clicked, this, &DevicePanel::onDisconnectClicked);
@@ -51,6 +67,8 @@ DevicePanel::DevicePanel(QWidget* parent)
 
 void DevicePanel::updateDeviceList(const QList<DeviceInfo>& devices)
 {
+    m_sdkCombo->setEnabled(!m_disconnectBtn->isEnabled());
+    m_refreshBtn->setEnabled(!m_disconnectBtn->isEnabled());
     m_devices = devices;
     m_tree->clear();
 
@@ -91,6 +109,14 @@ void DevicePanel::onDisconnectClicked()
 
 void DevicePanel::setConnectedState(bool connected)
 {
+    m_sdkCombo->setEnabled(!connected);
+    m_refreshBtn->setEnabled(!connected);
     m_connectBtn->setEnabled(!connected);
     m_disconnectBtn->setEnabled(connected);
+}
+
+void DevicePanel::setSdk(CameraSdk sdk)
+{
+    const QSignalBlocker blocker(m_sdkCombo);
+    m_sdkCombo->setCurrentIndex(m_sdkCombo->findData(QVariant::fromValue(sdk)));
 }

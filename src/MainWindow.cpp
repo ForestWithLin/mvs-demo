@@ -17,7 +17,7 @@
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
-    setWindowTitle("MVS 相机查看器");
+    setWindowTitle("MVS / FVCAM 相机查看器");
     resize(1280, 800);
 
     setupUI();
@@ -30,6 +30,8 @@ MainWindow::MainWindow(QWidget* parent)
     m_workerThread = new QThread(this);
     m_cameraEngine->setWorkerThread(m_workerThread);
     m_cameraEngine->moveToThread(m_workerThread);
+    // 在线程结束时由该线程销毁引擎，保证定时器与 SDK 资源释放的线程一致。
+    connect(m_workerThread, &QThread::finished, m_cameraEngine, &QObject::deleteLater);
     m_workerThread->start();
 
     setupConnections();
@@ -50,7 +52,6 @@ MainWindow::~MainWindow()
 {
     m_workerThread->quit();
     m_workerThread->wait();
-    delete m_cameraEngine;
 }
 
 void MainWindow::setupUI()
@@ -89,9 +90,9 @@ void MainWindow::setupMenuBar()
     // 帮助菜单
     QMenu* helpMenu = menuBar()->addMenu("帮助(&H)");
     helpMenu->addAction("关于(&A)", this, [this]() {
-        QMessageBox::about(this, "关于 MVS 相机查看器",
-                           "MVS 相机查看器 v1.0\n"
-                           "基于 Hikvision MVS SDK + Qt6.8.3\n"
+        QMessageBox::about(this, "关于相机查看器",
+                           "MVS / FVCAM 相机查看器 v1.0\n"
+                           "基于 Hikvision MVS SDK / FVCAM SDK + Qt6.8.3\n"
                            "支持实时图像显示、相机参数调节、图像操作等功能。");
     });
 }
@@ -153,6 +154,10 @@ void MainWindow::setupStatusBar()
 
 void MainWindow::setupConnections()
 {
+    connect(m_devicePanel, &DevicePanel::sdkChangeRequested,
+            m_cameraEngine, &CameraEngine::setSdk);
+    connect(m_cameraEngine, &CameraEngine::sdkChanged,
+            m_devicePanel, &DevicePanel::setSdk);
     // CameraEngine -> MainWindow
     connect(m_cameraEngine, &CameraEngine::deviceListUpdated,
             this, &MainWindow::onDevicesUpdated);

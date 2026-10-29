@@ -32,6 +32,7 @@ fi
 QT_LIB_DIR="/opt/software/Qt6.8.3/lib"
 QT_PLUGIN_DIR="/opt/software/Qt6.8.3/plugins"
 MVS_LIB_DIR="/opt/MVS/lib/64"
+FVCAM_LIB_DIR="${FVCAM_ROOT:-/opt/FVCAM}/lib"
 
 echo "====== 创建便携式包: $PORTABLE_DIR ======"
 
@@ -122,6 +123,9 @@ if [ -d "$MVS_LIB_DIR/ThirdParty" ]; then
         fi
     done
 fi
+
+# FVCAM 与 GenApi 运行库也必须随双 SDK 程序分发。
+cp -P "$FVCAM_LIB_DIR/"*.so* "$PORTABLE_DIR/lib/"
 
 # 5. 创建 qt.conf - 告诉 Qt 插件位置
 echo "[4/6] 创建配置文件..."

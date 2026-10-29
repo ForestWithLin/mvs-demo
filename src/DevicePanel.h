@@ -4,6 +4,7 @@
 #include <QWidget>
 #include <QTreeWidget>
 #include <QPushButton>
+#include <QComboBox>
 #include "Types.h"
 
 class DevicePanel : public QWidget
@@ -14,8 +15,10 @@ public:
 
     void updateDeviceList(const QList<DeviceInfo>& devices);
     void setConnectedState(bool connected);
+    void setSdk(CameraSdk sdk);
 
 signals:
+    void sdkChangeRequested(CameraSdk sdk);
     void connectRequested(int index);
     void disconnectRequested();
     void refreshRequested();
@@ -28,6 +31,7 @@ private slots:
     void onItemDoubleClicked(QTreeWidgetItem* item, int column);
 
 private:
+    QComboBox* m_sdkCombo;
     QTreeWidget* m_tree;
     QPushButton* m_connectBtn;
     QPushButton* m_disconnectBtn;

@@ -5,6 +5,7 @@
 #include <QMetaObject>
 #include <QMetaType>
 #include <QSet>
+#include <QSignalBlocker>
 
 CameraParamPanel::CameraParamPanel(QWidget* parent)
     : QWidget(parent)
@@ -40,7 +41,7 @@ void CameraParamPanel::buildParamList()
         // 曝光
         {"ExposureTime",       "曝光时间(us)",   "曝光", "float"},
         {"Gain",               "增益(dB)",       "曝光", "float"},
-        {"AutoExposureTime",   "自动曝光",       "曝光", "enum"},
+        {"ExposureAuto",       "自动曝光",       "曝光", "enum"},
 
         // 图像
         {"Width",              "宽度",           "图像", "int"},
@@ -60,6 +61,7 @@ void CameraParamPanel::buildParamList()
 
 void CameraParamPanel::requestAllParams()
 {
+    const QSignalBlocker blocker(m_tree);
     m_tree->clear();
     m_paramItems.clear();
 
@@ -93,6 +95,8 @@ void CameraParamPanel::requestAllParams()
 
 void CameraParamPanel::onParamReadFinished(const QString& key, const QVariant& value)
 {
+    // 程序更新值不能触发写相机，否则只读节点也会被重复写入。
+    const QSignalBlocker blocker(m_tree);
     auto it = m_paramItems.find(key);
     if (it == m_paramItems.end()) return;
 
